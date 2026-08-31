@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
+    @property
+    def database_connect_args(self) -> dict:
+        """Render Postgres requires SSL for external URLs."""
+        if "sslmode=require" in self.database_url or "ssl=true" in self.database_url:
+            return {"ssl": True}
+        return {}
+
 
 @lru_cache
 def get_settings() -> Settings:
