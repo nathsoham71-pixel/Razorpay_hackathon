@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import PageContainer from '../components/layout/PageContainer'
 import FeedUploadCard from '../components/dashboard/FeedUploadCard'
+import ProductStockList from '../components/dashboard/ProductStockList'
 import MandateSummaryCard from '../components/mandate/MandateSummaryCard'
 import { useMerchant } from '../context/MerchantContext'
-import { getDashboard } from '../api/demo'
+import { getDashboard, listProducts } from '../api/demo'
 
 function StatCard({ label, value, mono }) {
   return (
@@ -19,19 +20,25 @@ function StatCard({ label, value, mono }) {
 export default function DashboardPage() {
   const { merchantId } = useMerchant()
   const [dashboard, setDashboard] = useState(null)
+  const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const load = useCallback(async () => {
     if (!merchantId) {
       setDashboard(null)
+      setProducts([])
       return
     }
     setLoading(true)
     setError(null)
     try {
-      const data = await getDashboard(merchantId)
+      const [data, productList] = await Promise.all([
+        getDashboard(merchantId),
+        listProducts(merchantId, null),
+      ])
       setDashboard(data)
+      setProducts(productList)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -63,6 +70,12 @@ export default function DashboardPage() {
             value={dashboard.latest_feed?.version_number ?? '—'}
             mono
           />
+        </div>
+      )}
+
+      {merchantId && (
+        <div className="mb-8">
+          <ProductStockList products={products} loading={loading && !products.length} />
         </div>
       )}
 

@@ -33,9 +33,11 @@ export async function uploadFeed(merchantId, file) {
 
 /** @returns {Promise<Array>} */
 export async function listProducts(merchantId, isAgentReady = true) {
-  const { data } = await client.get(`/merchants/${merchantId}/products`, {
-    params: { is_agent_ready: isAgentReady },
-  })
+  const params = {}
+  if (typeof isAgentReady === 'boolean') {
+    params.is_agent_ready = isAgentReady
+  }
+  const { data } = await client.get(`/merchants/${merchantId}/products`, { params })
   return data
 }
 
