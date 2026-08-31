@@ -12,10 +12,14 @@ Authorization: Bearer <merchant mcp_access_token>.
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
+from app.config import get_settings
 from app.mcp.auth import MerchantTokenVerifier
 from app.mcp.tools.catalog_tools import register_catalog_tools
 from app.mcp.tools.purchase_tools import register_purchase_tools
 from app.mcp.tools.upsell_tools import register_upsell_tools
+
+_settings = get_settings()
+_mcp_url = _settings.mcp_resource_url
 
 # Bearer auth via MerchantTokenVerifier; streamable-http at mount path /
 mcp = FastMCP(
@@ -27,8 +31,8 @@ mcp = FastMCP(
     ),
     token_verifier=MerchantTokenVerifier(),
     auth=AuthSettings(
-        issuer_url="http://localhost:8000/mcp",
-        resource_server_url="http://localhost:8000/mcp",
+        issuer_url=_mcp_url,
+        resource_server_url=_mcp_url,
     ),
     streamable_http_path="/",
     json_response=True,

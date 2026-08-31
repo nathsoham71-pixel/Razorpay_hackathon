@@ -1,0 +1,41 @@
+# Render Blueprint — deploy backend + Postgres for Option B (public MCP)
+# Docs: https://render.com/docs/blueprint-spec
+#
+# After deploy:
+# 1. Set PUBLIC_BASE_URL to your service URL (e.g. https://merchant-platform-api.onrender.com)
+# 2. Add RAZORPAY_* and OPENAI_API_KEY in the Render dashboard
+# 3. Point Claude at https://<your-service>/mcp with Bearer token
+
+databases:
+  - name: merchant-platform-db
+    plan: free
+    databaseName: razorpay_merchant_website
+    user: merchant_platform
+
+services:
+  - type: web
+    name: merchant-platform-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: merchant-platform-db
+          property: connectionString
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: UPLOAD_DIR
+        value: /tmp/feed_uploads
+      - key: CORS_ORIGINS
+        sync: false
