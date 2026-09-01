@@ -22,13 +22,8 @@ from app.mcp.tools.upsell_tools import register_upsell_tools
 _settings = get_settings()
 _mcp_url = _settings.mcp_resource_url
 _transport_security = TransportSecuritySettings(
-    enable_dns_rebinding_protection=True,
-    allowed_hosts=_settings.mcp_allowed_hosts,
-    allowed_origins=[
-        _settings.public_base_url.rstrip("/"),
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    # Behind Render's reverse proxy; bearer auth protects the endpoint.
+    enable_dns_rebinding_protection=False,
 )
 
 # Bearer auth via MerchantTokenVerifier; streamable-http at mount path /
