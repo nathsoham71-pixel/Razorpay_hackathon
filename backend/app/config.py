@@ -1,6 +1,8 @@
 from functools import lru_cache
+import os
+from urllib.parse import urlparse
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,9 +38,30 @@ class Settings(BaseSettings):
     def _normalize_db_url(cls, value: str) -> str:
         return normalize_database_url(value)
 
+    @model_validator(mode="after")
+    def _apply_render_external_url(self) -> "Settings":
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
+        if render_url and self.public_base_url in {
+            "http://localhost:8000",
+            "https://localhost:8000",
+        }:
+            self.public_base_url = render_url.rstrip("/")
+        return self
+
     @property
     def mcp_resource_url(self) -> str:
         return f"{self.public_base_url.rstrip('/')}/mcp"
+
+    @property
+    def mcp_allowed_hosts(self) -> list[str]:
+        host = urlparse(self.public_base_url).hostname or "localhost"
+        return [
+            f"{host}:*",
+            "merchant-platform-api.onrender.com:*",
+            "127.0.0.1:*",
+            "localhost:*",
+            "[::1]:*",
+        ]
 
     @property
     def cors_origin_list(self) -> list[str]:
