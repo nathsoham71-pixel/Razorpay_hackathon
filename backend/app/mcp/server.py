@@ -9,8 +9,11 @@ the legacy SSE-only pattern. Clients connect to http://localhost:8000/mcp with
 Authorization: Bearer <merchant mcp_access_token>.
 """
 
+from urllib.parse import urlparse
+
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from app.config import get_settings
 from app.mcp.auth import MerchantTokenVerifier
@@ -20,6 +23,22 @@ from app.mcp.tools.upsell_tools import register_upsell_tools
 
 _settings = get_settings()
 _mcp_url = _settings.mcp_resource_url
+_parsed_base = urlparse(_settings.public_base_url)
+_public_host = _parsed_base.hostname or "localhost"
+_transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[
+        f"{_public_host}:*",
+        "127.0.0.1:*",
+        "localhost:*",
+        "[::1]:*",
+    ],
+    allowed_origins=[
+        _settings.public_base_url.rstrip("/"),
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+)
 
 # Bearer auth via MerchantTokenVerifier; streamable-http at mount path /
 mcp = FastMCP(
@@ -34,6 +53,8 @@ mcp = FastMCP(
         issuer_url=_mcp_url,
         resource_server_url=_mcp_url,
     ),
+    host="0.0.0.0",
+    transport_security=_transport_security,
     streamable_http_path="/",
     json_response=True,
     stateless_http=True,
