@@ -1,0 +1,74 @@
+"""Connect to merchant MCP, search for a product, and initiate purchase."""
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+import httpx
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+
+def load_mcp_config() -> tuple[str, str]:
+    mcp_json = Path.home() / ".cursor" / "mcp.json"
+    cfg = json.loads(mcp_json.read_text(encoding="utf-8"))
+    server = cfg["mcpServers"]["merchant-platform"]
+    url = server["url"]
+    token = server["headers"]["Authorization"].removeprefix("Bearer ").strip()
+    return url, token
+
+
+async def buy_product(query: str) -> None:
+    url, token = load_mcp_config()
+    if not url.endswith("/"):
+        url += "/"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    print(f"Connecting to MCP at {url} ...")
+    async with httpx.AsyncClient(
+        headers=headers,
+        timeout=120.0,
+        follow_redirects=True,
+        http2=False,
+    ) as http_client:
+        async with streamable_http_client(url, http_client=http_client) as (
+            read_stream,
+            write_stream,
+            _get_session_id,
+        ):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                print("MCP session initialized.\n")
+
+                print(f"=== Searching for '{query}' ===")
+                search_result = await session.call_tool(
+                    "search_products", {"query": query}
+                )
+                products = json.loads(search_result.content[0].text)
+                if isinstance(products, dict) and "error" in products:
+                    raise SystemExit(f"search_products failed: {products['error']}")
+                if not products:
+                    raise SystemExit(f"No products found for '{query}'")
+
+                product = products[0]
+                print(json.dumps(product, indent=2))
+
+                print("\n=== Initiating purchase ===")
+                purchase_result = await session.call_tool(
+                    "initiate_purchase",
+                    {
+                        "buyer_agent_id": "cursor_agent",
+                        "items": [{"product_id": product["id"], "quantity": 1}],
+                    },
+                )
+                order = json.loads(purchase_result.content[0].text)
+                if "error" in order:
+                    raise SystemExit(f"initiate_purchase failed: {order['error']}")
+
+                print(json.dumps(order, indent=2))
+                print(f"\nPurchase initiated for: {product['title']}")
+
+
+if __name__ == "__main__":
+    query = sys.argv[1] if len(sys.argv) > 1 else "desk lamp"
+    asyncio.run(buy_product(query))

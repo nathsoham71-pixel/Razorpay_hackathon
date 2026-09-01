@@ -1,9 +1,9 @@
-"""Full desk-lamp purchase via merchant MCP: search -> initiate -> confirm."""
+"""Full product purchase via merchant MCP: search -> initiate -> confirm."""
 import asyncio
 import hashlib
 import hmac
 import json
-import os
+import sys
 import uuid
 from pathlib import Path
 
@@ -24,27 +24,20 @@ def load_mcp_config() -> tuple[str, str]:
 
 def load_razorpay_secret() -> str:
     env_path = Path(__file__).resolve().parents[2] / ".env"
-    values = dotenv_values(env_path)
-    secret = values.get("RAZORPAY_KEY_SECRET", "")
+    secret = dotenv_values(env_path).get("RAZORPAY_KEY_SECRET", "")
     if not secret:
         raise SystemExit("RAZORPAY_KEY_SECRET missing in project .env")
     return secret
 
 
-def make_test_signature(razorpay_order_id: str, payment_id: str, secret: str) -> str:
-    message = f"{razorpay_order_id}|{payment_id}".encode()
-    return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
-
-
 def parse_tool_payload(result) -> dict | list:
-    text = result.content[0].text
-    data = json.loads(text)
+    data = json.loads(result.content[0].text)
     if isinstance(data, dict) and "error" in data:
         raise SystemExit(data["error"])
     return data
 
 
-async def main() -> None:
+async def buy_product(query: str) -> None:
     url, token = load_mcp_config()
     if not url.endswith("/"):
         url += "/"
@@ -66,62 +59,62 @@ async def main() -> None:
                 await session.initialize()
                 print("MCP session initialized.\n")
 
-                print("=== 1. search_products: desk lamp ===")
-                search_result = await session.call_tool(
-                    "search_products", {"query": "desk lamp"}
+                print(f"=== 1. search_products: {query} ===")
+                products = parse_tool_payload(
+                    await session.call_tool("search_products", {"query": query})
                 )
-                products = parse_tool_payload(search_result)
                 if isinstance(products, dict):
                     products = [products]
                 if not products:
-                    raise SystemExit("No desk lamp products found")
+                    raise SystemExit(f"No products found for '{query}'")
 
-                lamp = products[0]
-                print(json.dumps(lamp, indent=2))
+                product = products[0]
+                print(json.dumps(product, indent=2))
 
                 print("\n=== 2. initiate_purchase ===")
-                purchase_result = await session.call_tool(
-                    "initiate_purchase",
-                    {
-                        "buyer_agent_id": "cursor_agent",
-                        "items": [{"product_id": lamp["id"], "quantity": 1}],
-                    },
+                order = parse_tool_payload(
+                    await session.call_tool(
+                        "initiate_purchase",
+                        {
+                            "buyer_agent_id": "cursor_agent",
+                            "items": [{"product_id": product["id"], "quantity": 1}],
+                        },
+                    )
                 )
-                order = parse_tool_payload(purchase_result)
                 if not isinstance(order, dict):
                     raise SystemExit(f"Unexpected order response: {order}")
-                if "error" in order:
-                    raise SystemExit(f"initiate_purchase failed: {order['error']}")
                 print(json.dumps(order, indent=2))
 
-                razorpay_order_id = order["razorpay_order_id"]
-                internal_order_id = order["order_id"]
                 payment_id = f"pay_{uuid.uuid4().hex[:14]}"
-                signature = make_test_signature(
-                    razorpay_order_id, payment_id, load_razorpay_secret()
-                )
+                message = f"{order['razorpay_order_id']}|{payment_id}".encode()
+                signature = hmac.new(
+                    load_razorpay_secret().encode(), message, hashlib.sha256
+                ).hexdigest()
 
                 print("\n=== 3. confirm_purchase ===")
-                confirm_result = await session.call_tool(
-                    "confirm_purchase",
-                    {
-                        "order_id": internal_order_id,
-                        "razorpay_payment_id": payment_id,
-                        "razorpay_signature": signature,
-                    },
+                confirmed = parse_tool_payload(
+                    await session.call_tool(
+                        "confirm_purchase",
+                        {
+                            "order_id": order["order_id"],
+                            "razorpay_payment_id": payment_id,
+                            "razorpay_signature": signature,
+                        },
+                    )
                 )
-                confirmed = parse_tool_payload(confirm_result)
                 if not isinstance(confirmed, dict):
                     raise SystemExit(f"Unexpected confirm response: {confirmed}")
                 print(json.dumps(confirmed, indent=2))
 
                 if confirmed.get("status") == "paid":
                     print(
-                        f"\nDone. Desk Lamp purchased for INR {confirmed.get('total_amount_inr', lamp.get('price_inr'))}."
+                        f"\nDone. {product['title']} purchased for INR "
+                        f"{confirmed.get('total_amount_inr', product.get('price_inr'))}."
                     )
                 else:
                     raise SystemExit(f"Payment not confirmed: {confirmed}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    product_query = sys.argv[1] if len(sys.argv) > 1 else "desk lamp"
+    asyncio.run(buy_product(product_query))

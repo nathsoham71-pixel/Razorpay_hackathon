@@ -3,10 +3,11 @@ import { createContext, useContext, useEffect, useState } from 'react'
 const MerchantContext = createContext(null)
 
 const STORAGE_KEY = 'demo_merchant_id'
+const DEFAULT_MERCHANT_ID = import.meta.env.VITE_DEFAULT_MERCHANT_ID || ''
 
 export function MerchantProvider({ children }) {
   const [merchantId, setMerchantIdState] = useState(
-    () => localStorage.getItem(STORAGE_KEY) || ''
+    () => DEFAULT_MERCHANT_ID || localStorage.getItem(STORAGE_KEY) || ''
   )
 
   const setMerchantId = (id) => {
